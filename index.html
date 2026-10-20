@@ -399,13 +399,21 @@
   }
 
   function svgBlocks(h, t, o) {
-    var P = 34, GP = 6, RW = 11, RH = 34, GR = 9, C = 11, GC = 7, X = 10, Y0 = 8, RG = 16;
-    var yH = Y0, yT = yH + P + RG, yO = yT + RH + RG, s = '', i;
+    // Fünferstruktur: fünf Stück als Einheit, dann eine Lücke, dann der Rest.
+    // Platten: erste Reihe fünf, der Rest in einer zweiten Reihe darunter.
+    var P = 34, GP = 6, RS = 8, RW = 11, RH = 34, GR = 9, C = 11, GC = 7, G5 = 18;
+    var X = 10, Y0 = 8, RG = 16;
+    var rows = h > 5 ? 2 : 1;
+    var hBlock = rows * P + (rows - 1) * RS;
+    var yH = Y0, yT = yH + hBlock + RG, yO = yT + RH + RG, s = '', i;
     var guide = function (y) { return '<line class="guide" x1="' + X + '" x2="' + (380 - X) + '" y1="' + y + '" y2="' + y + '"/>'; };
-    s += guide(yH + P + 7) + guide(yT + RH + 7) + guide(yO + C + 7);
-    for (i = 0; i < h; i++) s += plateEl(X + i * (P + GP), yH, P);
-    for (i = 0; i < t; i++) s += rodEl(X + i * (RW + GR), yT, RW, RH);
-    for (i = 0; i < o; i++) s += cubeEl(X + i * (C + GC), yO, C);
+    s += guide(yH + hBlock + 7) + guide(yT + RH + 7) + guide(yO + C + 7);
+    for (i = 0; i < h; i++) {
+      var col = i < 5 ? i : i - 5, row = i < 5 ? 0 : 1;
+      s += plateEl(X + col * (P + GP), yH + row * (P + RS), P);
+    }
+    for (i = 0; i < t; i++) s += rodEl(X + i * (RW + GR) + (i >= 5 ? G5 : 0), yT, RW, RH);
+    for (i = 0; i < o; i++) s += cubeEl(X + i * (C + GC) + (i >= 5 ? G5 : 0), yO, C);
     var label = h + ' Hunderterplatten, ' + t + ' Zehnerstangen, ' + o + ' Einerwürfel';
     return '<svg viewBox="0 0 380 ' + (yO + C + 16) + '" role="img" aria-label="' + label + '">' + s + '</svg>';
   }
