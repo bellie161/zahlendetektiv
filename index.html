@@ -286,9 +286,13 @@
   </section>
 </div>
 
+<!-- Lernstand-Aufzeichnung (Auswertung: bellie161.github.io/Leseapp/lernstand.html) -->
+<script src="https://bellie161.github.io/Leseapp/lernlog.js"></script>
 <script>
 (function () {
   'use strict';
+  var LL = window.LernLog || null;
+  if (LL) LL.init('Zahlendetektiv');
 
   /*GEN-START*/
   var rand = function (a, b) { return a + Math.floor(Math.random() * (b - a + 1)); };
@@ -447,6 +451,7 @@
   function showScreen(name) {
     ['start', 'task', 'end'].forEach(function (n) { $('#screen-' + n).hidden = n !== name; });
     var inRound = name === 'task';
+    if (!inRound && LL) LL.abbruch();
     $('#progress').hidden = !inRound;
     $('#count').hidden = !inRound;
     window.scrollTo(0, 0);
@@ -487,6 +492,8 @@
     updateAnswer();
     updateProgress();
     window.scrollTo(0, 0);
+    if (LL) LL.start(t.type === 'entry' ? 'Zahl ablesen' + (S.practice ? ' (Wiederholung)' : '') : 'Richtig oder falsch?' + (S.practice ? ' (Wiederholung)' : ''),
+      t.type === 'entry' ? 'Gezeigt: ' + t.n : 'Gezeigt: ' + t.n + ', dort steht ' + t.label + ' (passt: ' + (t.isTrue ? 'ja' : 'nein') + ')');
   }
 
   function updateAnswer() {
@@ -534,6 +541,7 @@
     t.tries++;
     if (given === String(t.n)) {
       t.result = t.tries === 1 ? 'ok' : 'miss';
+      if (LL) LL.fertig(true);
       feedback('good', t.tries === 1 ? pick(PRAISE) : 'Jetzt stimmt es!', compose(t) + '. Die Zahl heißt ' + t.n + '.', false);
       endTask();
       return;
@@ -544,8 +552,10 @@
     else if (t.o === 0 && given === String(t.n / 10)) tip = 'Es gibt keine Einerwürfel. Für 0 Einer schreibst du am Ende eine 0.';
     else if (t.h === 0 && given.length === 3) tip = 'Es gibt keine Hunderterplatten. Die Zahl hat nur Zehner und Einer.';
     else tip = 'Zähle Hunderter, Zehner und Einer einzeln.';
+    if (LL) LL.fehler(given, tip);
     if (t.tries >= 2) {
       t.result = 'miss';
+      if (LL) LL.fertig(false);
       feedback('miss', 'Das war knifflig.', tip, true, true);
       endTask();
     } else {
@@ -561,6 +571,7 @@
     var right = sayTrue === t.isTrue;
     t.result = right ? 'ok' : 'miss';
     t.said = sayTrue;
+    if (LL) { if (!right) LL.fehler(sayTrue ? 'passt' : 'passt nicht'); LL.fertig(right); }
     var bt = $('#btn-true'), bf = $('#btn-false');
     bt.disabled = bf.disabled = true;
     var chosen = sayTrue ? bt : bf, other = sayTrue ? bf : bt;
