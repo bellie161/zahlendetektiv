@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Zahlendetektiv</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -183,6 +184,16 @@
     .answer.edit::after { animation: none; }
     * { scroll-behavior: auto !important; }
   }
+  /* Zahlen hören */
+  .listen { display: grid; gap: 14px; justify-items: center; padding: 18px 0 8px; }
+  .listen-btn { font-family: var(--font-display); font-weight: 600; font-size: 30px; min-height: 110px; width: min(100%, 360px); border: 0; border-radius: 24px; background: var(--accent); color: var(--accent-ink); cursor: pointer; box-shadow: 0 5px 0 rgba(0,0,0,.25); }
+  .listen-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,.25); }
+  .listen-btn.pulse { animation: lpulse .9s ease-out; }
+  @keyframes lpulse { 0% { box-shadow: 0 5px 0 rgba(0,0,0,.25), 0 0 0 0 rgba(44,79,163,.55); } 100% { box-shadow: 0 5px 0 rgba(0,0,0,.25), 0 0 0 26px rgba(44,79,163,0); } }
+  .listen-slow { font-family: var(--font-display); font-weight: 500; font-size: 22px; min-height: 62px; width: min(100%, 360px); border-radius: 18px; border: 2px solid var(--accent); background: var(--card); color: var(--accent); cursor: pointer; }
+  .listen-note { color: var(--muted); font-size: 15px; }
+  .numword { font-family: var(--font-display); font-size: 20px; color: var(--muted); text-align: center; margin-top: 6px; }
+  @media (prefers-reduced-motion: reduce) { .listen-btn.pulse { animation: none; } }
 </style>
 
 <div class="app">
@@ -209,8 +220,10 @@
       <ul class="how">
         <li><b>Zahl ablesen:</b> Zähle Hunderter, Zehner und Einer und tippe die Zahl ein.</li>
         <li><b>Richtig oder falsch:</b> Passt die Zahl genau zur Darstellung?</li>
+        <li><b>Zahlen hören:</b> Du hörst eine Zahl und tippst sie ein.</li>
       </ul>
       <button class="primary" id="btn-start">Aufgaben starten</button>
+      <button class="secondary" id="btn-listen">🔊 Zahlen hören</button>
       <p class="stats" id="stats" hidden></p>
     </div>
     <div class="card">
@@ -288,6 +301,7 @@
 
 <!-- Lernstand-Aufzeichnung (Auswertung: bellie161.github.io/Leseapp/lernstand.html) -->
 <script src="https://bellie161.github.io/Leseapp/lernlog.js"></script>
+<script src="https://bellie161.github.io/Leseapp/denkpause.js"></script>
 <script>
 (function () {
   'use strict';
@@ -387,6 +401,91 @@
   }
   /*GEN-END*/
 
+  /* Hilfen für „Zahlen hören“ */
+  var POW = function (i) { return Math.pow(10, i); };
+  function digitsOf(n) { var c = []; for (var i = 0; i <= 6; i++) c.push(Math.floor(n / POW(i)) % 10); return c; }
+  function numOf(c) { var n = 0; for (var i = 0; i < c.length; i++) n += (c[i] || 0) * POW(i); return n; }
+  /* ---- Zahlen hören: Zahlwörter, Aufgaben, Tipps ---- */
+  var ONES = ['', 'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun', 'zehn', 'elf', 'zwölf', 'dreizehn', 'vierzehn', 'fünfzehn', 'sechzehn', 'siebzehn', 'achtzehn', 'neunzehn'];
+  var TENS = ['', '', 'zwanzig', 'dreißig', 'vierzig', 'fünfzig', 'sechzig', 'siebzig', 'achtzig', 'neunzig'];
+  function w99(r) {
+    if (r < 20) return ONES[r];
+    var e = r % 10, z = Math.floor(r / 10);
+    return (e ? (e === 1 ? 'ein' : ONES[e]) + 'und' : '') + TENS[z];
+  }
+  function w999(n) {
+    var h = Math.floor(n / 100), r = n % 100;
+    return (h ? (h === 1 ? 'ein' : ONES[h]) + 'hundert' : '') + w99(r);
+  }
+  function numWord(n) {
+    if (n === 0) return 'null';
+    if (n >= 1000000) return 'eine Million';
+    var th = Math.floor(n / 1000), r = n % 1000, s = '';
+    if (th) s = w999(th).replace(/eins$/, 'ein') + 'tausend';
+    return s + w999(r);
+  }
+  function listenTask(n) { var s = split(n); return { type: 'listen', n: n, h: s.h, t: s.t, o: s.o, tries: 0, result: null, wrong: [] }; }
+  function nzDigits(len) { var d = []; for (var i = 0; i < len; i++) d.push(rand(1, 9)); return d; }  // d[0] = Einer
+  // Eine Runde mit 12 Zahlen: gut die Hälfte mit Nullen (306, 360, 4005 …), dazu Zahlen ohne Null und Zahlendreher-Paare (356 / 365)
+  function buildListen(t) {
+    for (var guard = 0; guard < 500; guard++) {
+      var U = POW(t), V = POW(t - 1), W = POW(t - 2);
+      var fam = function () { var p = two(), a = p[0], b = p[1]; return [a * U + b, a * U + b * V, a * V + b * W]; };
+      var blocks = [fam(), fam()];
+      var p = two();
+      var singles = [rand(1, 9) * U];                                     // 300 / 3000
+      var d = nzDigits(t + 1); d[rand(0, t - 1)] = 0; singles.push(numOf(d)); // eine Null irgendwo (705, 3045 …)
+      if (t === 2) singles.push(10 * rand(1, 9));                          // 50
+      else singles.push(numOf(nzDigits(t)));                               // eine Stelle kürzer, ohne Null
+      singles.push(numOf(nzDigits(t + 1)));                                // volle Länge, ohne Null
+      // Zahlendreher-Paar: Einer und Zehner vertauscht (356 / 365); ab 10 000 manchmal beim Tausender-Teil
+      var q = nzDigits(t + 1), i0 = t >= 4 && Math.random() < 0.4 ? 3 : 0;
+      if (q[i0] === q[i0 + 1]) q[i0 + 1] = q[i0] === 9 ? 1 : q[i0] + 1;
+      var q2 = q.slice(); q2[i0] = q[i0 + 1]; q2[i0 + 1] = q[i0];
+      blocks.push([numOf(q), numOf(q2)]);
+      singles.forEach(function (n) { blocks.push([n]); });
+      var all = {}, cnt = 0;
+      blocks.forEach(function (b) { b.forEach(function (n) { if (n > 0 && !all[n]) { all[n] = 1; cnt++; } }); });
+      if (cnt !== 12) continue;
+      blocks = blocks.map(function (b) { return b.length === 3 ? shuffle(b.slice()) : b; });
+      var ok = false, k;
+      for (k = 0; k < 100 && !ok; k++) { shuffle(blocks); ok = blocks[0].length > 1 || blocks[1].length > 1; }
+      var out = [];
+      blocks.forEach(function (b) { out = out.concat(b); });
+      return out.map(listenTask);
+    }
+    throw new Error('Zahlen hören');
+  }
+  function placeName(i) { return ['Einer', 'Zehner', 'Hunderter', 'Tausender', 'Zehntausender', 'Hunderttausender'][i]; }
+  function hintListen(task, g) {
+    var ns = String(task.n), w = numWord(task.n), i, j, p;
+    // nur Nullen weggelassen? (306 -> 36, 600 -> 60, 4005 -> 45)
+    if (g.length < ns.length) {
+      for (i = 0, j = 0; i < ns.length; i++) { if (j < g.length && ns[i] === g[j]) j++; else if (ns[i] !== '0') break; }
+      if (i === ns.length && j === g.length) {
+        var empty = [];
+        for (i = 1; i < ns.length; i++) if (ns[i] === '0') empty.push(placeName(ns.length - 1 - i));
+        var miss = ns.length - g.length;
+        return 'Du hast ' + (miss === 1 ? 'eine Null' : miss + ' Nullen') + ' vergessen. Bei „' + w + '“ ' +
+          (empty.length === 1 ? 'sind die ' + empty[0] + ' leer' : 'sind die ' + empty.slice(0, -1).join(', ') + ' und die ' + empty[empty.length - 1] + ' leer') +
+          '. Für jede leere Stelle schreibst du eine 0.';
+      }
+    }
+    if (g.length === ns.length) {
+      for (i = 0; i < ns.length - 1; i++) {
+        var sw = ns.slice(0, i) + ns[i + 1] + ns[i] + ns.slice(i + 2);
+        if (sw !== g) continue;
+        p = ns.length - 2 - i;
+        if (p === 0 || p === 3) return 'Achtung, Zahlendreher! Bei „' + w + '“ hörst du die ' + placeName(p) + ' zuerst und dann die ' + placeName(p + 1) + '. Du schreibst aber zuerst die ' + placeName(p + 1) + ' und dann die ' + placeName(p) + '.';
+        return 'Zwei Ziffern sind vertauscht. Hör noch einmal genau hin.';
+      }
+    }
+    if (g.length > ns.length) return 'Das sind zu viele Ziffern. Hör noch einmal: „' + w + '“ hat nur ' + ns.length + ' Stellen.';
+    if (g.length < ns.length) return 'Da fehlt eine Stelle. Hör noch einmal genau hin. Denk an die Nullen.';
+    return 'Hör noch einmal genau hin. Was hörst du zuerst? Schreib die Stellen der Reihe nach auf.';
+  }
+
+
   /* ---------- Zeichnen ---------- */
   function plateEl(x, y, s) {
     var st = s / 10, d = '';
@@ -436,9 +535,32 @@
   }
 
   /* ---------- Zustand ---------- */
+  /* ---- Zahlen hören: Vorlesen ---- */
+  var deVoice = null;
+  function pickVoice() {
+    try { var v = speechSynthesis.getVoices().filter(function (x) { return /^de/i.test(x.lang); }); deVoice = v.filter(function (x) { return /de-DE/i.test(x.lang); })[0] || v[0] || null; } catch (e) {}
+  }
+  try { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; } catch (e) {}
+  function speakNum(n, slow) {
+    try {
+      speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(String(n));
+      u.lang = 'de-DE'; if (deVoice) u.voice = deVoice;
+      u.rate = slow ? 0.55 : 0.8;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+    var b = document.querySelector('.listen-btn');
+    if (b) { b.classList.remove('pulse'); void b.offsetWidth; b.classList.add('pulse'); }
+  }
+  function listenHTML() {
+    return '<div class="listen"><button type="button" class="listen-btn" data-listen="normal">🔊 Hör gut zu!</button>' +
+      '<button type="button" class="listen-slow" data-listen="slow">🐢 Noch einmal langsam</button>' +
+      '<p class="listen-note">Du kannst die Zahl so oft hören, wie du willst.</p></div>';
+  }
+
   var $ = function (s) { return document.querySelector(s); };
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var S = { tasks: [], i: 0, input: '', phase: 'answer', practice: false };
+  var S = { tasks: [], i: 0, input: '', phase: 'answer', practice: false, kind: 'mix' };
   var cur = function () { return S.tasks[S.i]; };
   var STORE = 'zahlendetektiv.v1';
 
@@ -471,8 +593,8 @@
     $('#count').textContent = 'Aufgabe ' + (S.i + 1) + ' von ' + S.tasks.length;
   }
 
-  function startRound(tasks, practice) {
-    S = { tasks: tasks, i: 0, input: '', phase: 'answer', practice: practice };
+  function startRound(tasks, practice, kind) {
+    S = { tasks: tasks, i: 0, input: '', phase: 'answer', practice: practice, kind: kind || 'mix' };
     buildProgress();
     showScreen('task');
     renderTask();
@@ -481,10 +603,17 @@
   function renderTask() {
     var t = cur();
     S.input = ''; S.phase = 'answer';
-    $('#prompt').textContent = t.type === 'entry' ? 'Wie heißt die Zahl?' : 'Passt die Zahl zur Darstellung?';
-    $('#drawing').innerHTML = svgBlocks(t.h, t.t, t.o);
-    $('#answer-label').textContent = t.type === 'entry' ? 'Die Zahl heißt' : 'Dort steht die Zahl';
-    $('#keypad').hidden = t.type !== 'entry';
+    if (t.type === 'listen') {
+      $('#prompt').textContent = 'Hör gut zu! Tippe die Zahl ein, die du hörst.';
+      $('#drawing').innerHTML = listenHTML();
+      $('#answer-label').textContent = 'Ich höre die Zahl';
+    } else {
+      $('#prompt').textContent = t.type === 'entry' ? 'Wie heißt die Zahl?' : 'Passt die Zahl zur Darstellung?';
+      $('#drawing').innerHTML = svgBlocks(t.h, t.t, t.o);
+      $('#answer-label').textContent = t.type === 'entry' ? 'Die Zahl heißt' : 'Dort steht die Zahl';
+    }
+    $('#legend').hidden = t.type === 'listen';
+    $('#keypad').hidden = t.type === 'tf';
     $('#tf').hidden = t.type !== 'tf';
     $('#feedback').hidden = true;
     $('#btn-next').hidden = true;
@@ -492,13 +621,16 @@
     updateAnswer();
     updateProgress();
     window.scrollTo(0, 0);
-    if (LL) LL.start(t.type === 'entry' ? 'Zahl ablesen' + (S.practice ? ' (Wiederholung)' : '') : 'Richtig oder falsch?' + (S.practice ? ' (Wiederholung)' : ''),
+    if (t.type === 'listen') {
+      if (LL) LL.start('Zahlen hören' + (S.practice ? ' (Wiederholung)' : ''), 'Gesprochen: ' + t.n);
+      setTimeout(function () { speakNum(t.n); }, 350);
+    } else if (LL) LL.start(t.type === 'entry' ? 'Zahl ablesen' + (S.practice ? ' (Wiederholung)' : '') : 'Richtig oder falsch?' + (S.practice ? ' (Wiederholung)' : ''),
       t.type === 'entry' ? 'Gezeigt: ' + t.n : 'Gezeigt: ' + t.n + ', dort steht ' + t.label + ' (passt: ' + (t.isTrue ? 'ja' : 'nein') + ')');
   }
 
   function updateAnswer() {
     var t = cur(), a = $('#answer');
-    if (t.type === 'entry') {
+    if (t.type !== 'tf') {
       a.className = 'answer' + (S.phase === 'answer' ? ' edit' : '');
       a.innerHTML = S.input ? S.input : '<span class="ph">?</span>';
       $('#key-ok').disabled = S.input === '';
@@ -521,7 +653,8 @@
   function endTask() {
     S.phase = 'done';
     var t = cur();
-    if (t.type === 'entry') { $('#keypad').hidden = true; updateAnswer(); }
+    if (t.type !== 'tf') { $('#keypad').hidden = true; updateAnswer(); }
+    if (t.type === 'listen') { $('#drawing').innerHTML = svgBlocks(t.h, t.t, t.o) + '<p class="numword">„' + numWord(t.n) + '“ = ' + t.n + '</p>'; $('#legend').hidden = false; }
     var last = S.i === S.tasks.length - 1;
     var nb = $('#btn-next');
     nb.textContent = last ? 'Ergebnis ansehen' : 'Weiter';
@@ -536,19 +669,20 @@
 
   function check() {
     var t = cur();
-    if (t.type !== 'entry' || S.phase !== 'answer' || S.input === '') return;
+    if (t.type === 'tf' || S.phase !== 'answer' || S.input === '') return;
     var given = S.input;
     t.tries++;
     if (given === String(t.n)) {
       t.result = t.tries === 1 ? 'ok' : 'miss';
       if (LL) LL.fertig(true);
-      feedback('good', t.tries === 1 ? pick(PRAISE) : 'Jetzt stimmt es!', compose(t) + '. Die Zahl heißt ' + t.n + '.', false);
+      feedback('good', t.tries === 1 ? pick(PRAISE) : 'Jetzt stimmt es!', (t.type === 'listen' ? '„' + numWord(t.n) + '“: ' : '') + compose(t) + '. Die Zahl heißt ' + t.n + '.', false);
       endTask();
       return;
     }
     t.wrong.push(given);
     var tip;
-    if (t.t === 0 && given === String(t.h * 10 + t.o)) tip = 'Es gibt keine Zehnerstangen. Für 0 Zehner schreibst du eine 0.';
+    if (t.type === 'listen') tip = hintListen(t, given);
+    else if (t.t === 0 && given === String(t.h * 10 + t.o)) tip = 'Es gibt keine Zehnerstangen. Für 0 Zehner schreibst du eine 0.';
     else if (t.o === 0 && given === String(t.n / 10)) tip = 'Es gibt keine Einerwürfel. Für 0 Einer schreibst du am Ende eine 0.';
     else if (t.h === 0 && given.length === 3) tip = 'Es gibt keine Hunderterplatten. Die Zahl hat nur Zehner und Einer.';
     else tip = 'Zähle Hunderter, Zehner und Einer einzeln.';
@@ -558,8 +692,10 @@
       if (LL) LL.fertig(false);
       feedback('miss', 'Das war knifflig.', tip, true, true);
       endTask();
+      if (window.Denkpause) Denkpause.falsch(tip + ' Schau dir danach die Lösung an.', 2, { loesung: true });
     } else {
-      feedback('hint', 'Noch nicht ganz.', tip + ' Versuche es noch einmal.', true, false);
+      feedback('hint', 'Noch nicht ganz.', tip + ' Versuche es noch einmal.', t.type !== 'listen', false);
+      if (window.Denkpause) Denkpause.falsch(tip, 1);
       S.input = '';
       updateAnswer();
     }
@@ -596,7 +732,7 @@
     var misses = S.tasks.filter(function (t) { return t.result !== 'ok'; });
     var ratio = ok / total;
 
-    $('#end-kicker').textContent = S.practice ? 'Übungsrunde' : 'Fall abgeschlossen';
+    $('#end-kicker').textContent = (S.practice ? 'Übungsrunde' : 'Fall abgeschlossen') + (S.kind === 'listen' ? ' · Zahlen hören' : '');
     $('#end-title').textContent = ratio >= 0.9 ? 'Scharf beobachtet!' : ratio >= 0.6 ? 'Gut gespürt!' : 'Dranbleiben lohnt sich!';
     $('#end-n').textContent = ok;
     $('#end-total').textContent = total;
@@ -605,7 +741,8 @@
     var list = $('#end-list');
     list.innerHTML = misses.map(function (t) {
       var txt;
-      if (t.type === 'entry') txt = 'Gezeigt war <b>' + t.n + '</b>. Erster Versuch: ' + t.wrong[0] + '.';
+      if (t.type === 'listen') txt = 'Gehört: <b>' + t.n + '</b> („' + numWord(t.n) + '“). Erster Versuch: ' + t.wrong[0] + '.';
+      else if (t.type === 'entry') txt = 'Gezeigt war <b>' + t.n + '</b>. Erster Versuch: ' + t.wrong[0] + '.';
       else if (t.isTrue) txt = 'Die Zahl <b>' + t.n + '</b> passte zur Darstellung.';
       else txt = 'Dort stand ' + t.label + ', gezeigt war <b>' + t.n + '</b>.';
       return '<div class="miss-item">' + svgBlocks(t.h, t.t, t.o) + '<p>' + txt + '</p></div>';
@@ -613,7 +750,7 @@
     $('#end-misses').hidden = misses.length === 0;
     $('#btn-practice').hidden = misses.length === 0;
 
-    if (!S.practice) {
+    if (!S.practice && S.kind !== 'listen') {
       var st = loadStats() || { runden: 0, best: 0 };
       st.runden += 1;
       st.best = Math.max(st.best, ok);
@@ -625,7 +762,7 @@
 
   /* ---------- Ereignisse ---------- */
   function press(k) {
-    if (S.phase !== 'answer' || cur().type !== 'entry') return;
+    if (S.phase !== 'answer' || cur().type === 'tf') return;
     if (k === 'back') S.input = S.input.slice(0, -1);
     else if (k === 'ok') { check(); return; }
     else if (S.input.length < 3) S.input += k;
@@ -640,14 +777,20 @@
   $('#btn-false').addEventListener('click', function () { answerTF(false); });
   $('#btn-next').addEventListener('click', next);
   $('#btn-start').addEventListener('click', function () { startRound(buildRound(), false); });
-  $('#btn-again').addEventListener('click', function () { startRound(buildRound(), false); });
+  $('#btn-listen').addEventListener('click', function () { startRound(buildListen(2), false, 'listen'); });
+  $('#btn-again').addEventListener('click', function () { startRound(S.kind === 'listen' ? buildListen(2) : buildRound(), false, S.kind); });
+  $('#drawing').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-listen]'), t = cur();
+    if (!b || !t || t.type !== 'listen') return;
+    speakNum(t.n, b.getAttribute('data-listen') === 'slow');
+  });
   $('#btn-practice').addEventListener('click', function () {
     var again = S.missed.map(function (t) {
       var c = {}; for (var k in t) c[k] = t[k];
       c.tries = 0; c.result = null; c.wrong = []; delete c.said;
       return c;
     });
-    startRound(again, true);
+    startRound(again, true, S.kind);
   });
 
   document.addEventListener('keydown', function (e) {
